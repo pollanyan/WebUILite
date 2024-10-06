@@ -1,2 +1,7 @@
-gradio_cached_examples\
-flagged\
+gradio_cached_examples/
+flagged/
+__pycache__/
+.chat/
+parameters.json
+hello.py
+hello1.py
