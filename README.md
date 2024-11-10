@@ -66,3 +66,4 @@ WebUILite 是一个基于 Gradio 的轻量级 Web 用户界面，用于与开源
 - MAX_MESSAGES = 10  # 最大消息数 # TODO: make this configurable
 9. 解决API_KEY加解密问题
 10. 支持多个模型Provider
+11. 增加异常处理，例如设置模型失败

@@ -1,6 +1,9 @@
 gradio_cached_examples/
 flagged/
+build/
+dist/
 __pycache__/
 .chat/
 parameters.json
 hello*.py
+app_main.spec
