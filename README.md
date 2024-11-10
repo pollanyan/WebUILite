@@ -44,7 +44,7 @@ WebUILite 是一个基于 Gradio 的轻量级 Web 用户界面，用于与开源
 - `BASE_URL`: API 的基础 URL
 - `API_KEY`: OpenAI API 密钥，Ollama固定为ollama
 - `TEMPERATURE`: 控制输出随机性的温度参数
-- `DEFAULT_MODEL`: 默认使用的模型
+- `MODEL`: 默认使用的模型
 
 ## 贡献
 
@@ -53,3 +53,16 @@ WebUILite 是一个基于 Gradio 的轻量级 Web 用户界面，用于与开源
 ## 许可证
 
 该项目使用 MIT 许可证。有关详细信息，请参阅 LICENSE 文件。
+
+## TODO
+
+1. 支持黄区/绿区，支持设置无代理
+2. 记录/打开历史会话
+3. 支持RAG
+4. 支持工具
+5. 支持多模态
+8. 历史限制条数，使用langgraph
+- 已切换，但是当总结消息时，界面对话不自然，需要进一步修改
+- MAX_MESSAGES = 10  # 最大消息数 # TODO: make this configurable
+9. 解决API_KEY加解密问题
+10. 支持多个模型Provider

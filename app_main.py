@@ -6,8 +6,11 @@ from openai import OpenAI
 import gradio as gr
 from pydantic import SecretStr
 from app_config import ConfigManager
-from app_llm import ChatPredictor
+
+# from app_llm import ChatPredictor
 import base64
+from app_llm import ChatWorkflow, ChatLLM, LLMProvider
+import asyncio
 
 # 使用ConfigManager类来管理配置
 config_manager = ConfigManager()
@@ -16,7 +19,7 @@ config_manager = ConfigManager()
 # BASE_URL = config_manager.get("BASE_URL", "http://localhost:11434/v1/")
 # API_KEY = config_manager.get("API_KEY", SecretStr("ollama").get_secret_value())
 # TEMPERATURE = config_manager.get("TEMPERATURE", 1.0)
-# DEFAULT_MODEL = config_manager.get("DEFAULT_MODEL", "qwen2.5:latest")
+# MODEL = config_manager.get("MODEL", "qwen2.5:latest")
 
 # 创建一个字典来存储应用的全局状态
 # def refresh_app_session():
@@ -24,7 +27,7 @@ config_manager = ConfigManager()
 #         "BASE_URL": config_manager.get("BASE_URL", "http://localhost:11434/v1/"),
 #         "API_KEY": config_manager.get("API_KEY", SecretStr("ollama").get_secret_value()),
 #         "TEMPERATURE": config_manager.get("TEMPERATURE", 1.0),
-#         "DEFAULT_MODEL": config_manager.get("DEFAULT_MODEL", "qwen2.5:latest")
+#         "MODEL": config_manager.get("MODEL", "qwen2.5:latest")
 #     }
 #     return app_session
 
@@ -41,45 +44,50 @@ app_session = config_manager.load_config()
 #     return models
 
 # 创建 ChatPredictor 实例
-chat_predictor = ChatPredictor(
-    app_session["BASE_URL"], app_session["API_KEY"], app_session["TEMPERATURE"]
+# chat_predictor = ChatPredictor(
+#     app_session["BASE_URL"], app_session["API_KEY"], app_session["TEMPERATURE"]
+# )
+
+chat_llm = ChatLLM(
+    app_session["MODEL"],
+    app_session["BASE_URL"],
+    app_session["API_KEY"],
+    app_session["TEMPERATURE"],
 )
+
+
+chat_predictor = ChatWorkflow(chat_llm)
+
+
+def get_models():
+    return LLMProvider(app_session["BASE_URL"], app_session["API_KEY"]).get_models()
+
 
 # 获取可用的模型列表
 # models = chat_predictor.get_models()
 
-
-# 定义一个包装函数来调用 ChatPredictor 的 predict 方法
-def predict_wrapper(message, history):
-    """
-    包装 ChatPredictor 的 predict 方法，用于 Gradio 接口
-    :param message: 用户输入的消息
-    :param history: 聊天历史
-    :param model: 选择的模型
-    :return: ChatPredictor 的预测结果
-    """
-    return chat_predictor.predict(message, history, app_session["DEFAULT_MODEL"])
-
-
 # 创建 Gradio 界面
 with gr.Blocks(fill_height=True) as demo:
-    chatbot = gr.Chatbot(layout="panel", label="聊天")
+    chatbot = gr.Chatbot(layout="panel", type="messages", label="聊天",scale=2)
+    # chatbot = gr.Chatbot(label="聊天")
 
     with gr.Group():
-        models = chat_predictor.get_models()
+        models = get_models()
         with gr.Row():
             # 创建模型选择下拉框
+            # print("当前Model", app_session["MODEL"])
             model_selector = gr.Dropdown(
                 choices=models,
-                value=app_session["DEFAULT_MODEL"],
+                value=app_session["MODEL"],
                 show_label=False,
                 container=False,
             )
 
             # 定义模型选择变化时的处理函数
             def change_model(selected_model):
-                # global DEFAULT_MODEL
-                app_session["DEFAULT_MODEL"] = selected_model
+                app_session["MODEL"] = selected_model
+                # print("Model变更为：", app_session["MODEL"])
+                chat_llm.set_model(selected_model)
 
             model_selector.change(fn=change_model, inputs=[model_selector])
 
@@ -100,30 +108,37 @@ with gr.Blocks(fill_height=True) as demo:
                 step=0.1,
                 value=config["TEMPERATURE"],
             )
-            default_model_input = gr.Dropdown(
-                choices=models, value=config["DEFAULT_MODEL"], label="DEFAULT_MODEL"
-            )
-            # default_model_input = model_selector
+            # MODEL_input = gr.Dropdown(
+            #     # choices=models, value=config["MODEL"], label="MODEL"
+            #     choices=models,
+            #     value=app_session["MODEL"],
+            #     label="MODEL",
+            # )
+
+            # MODEL_input = model_selector
+
             output_message = gr.Textbox(label="输出", interactive=False)
             with gr.Row():
                 save_button = gr.Button("保存")
                 close_button = gr.Button("返回")
 
                 # 保存配置
-                def save_config(base_url, api_key, temperature, default_model):
+                def save_config(base_url, api_key, temperature, model):
                     config_manager.set("BASE_URL", base_url)
                     config_manager.set("API_KEY", api_key)
                     config_manager.set("TEMPERATURE", temperature)
-                    config_manager.set("DEFAULT_MODEL", default_model)
+                    config_manager.set("MODEL", model)
                     config_manager.save_config()
 
                     # 重新获取配置
                     global app_session
                     app_session = config_manager.load_config()
-                    # model_selector.value = default_model
-                    print("当前模型", model_selector.value)
+                    chat_llm.set_llm(model, base_url, api_key, temperature)
+                    # chat_predictor = get_workflow(app_session)
+                    # model_selector.value = MODEL
+                    # print("当前模型", model_selector.value)
 
-                    return "成功, 配置已保存到app_gradio.json", default_model
+                    return "成功, 已保存到cfg/app_gradio.json。"
 
                 save_button.click(
                     fn=save_config,
@@ -131,9 +146,9 @@ with gr.Blocks(fill_height=True) as demo:
                         base_url_input,
                         api_key_input,
                         temperature_input,
-                        default_model_input,
+                        model_selector,
                     ],
-                    outputs=[output_message, model_selector],
+                    outputs=[output_message],
                 )
 
                 # 关闭配置弹窗
@@ -146,27 +161,28 @@ with gr.Blocks(fill_height=True) as demo:
                 fn=lambda: gr.update(visible=True), outputs=[config_popup]
             )
 
-        # 创建多模态文本框，支持上传多种类型的文件
-        textbox = gr.MultimodalTextbox(
-            file_count="multiple",
-            file_types=["image", "text", ".docx", ".pptx", ".xlsx", ".pdf"],
-            info="支持上传多文件, 文件格式: PDF/Word文档(DOC/DOCX)/Excel表格(XLSX)/PPT(PPT/PPTX)/TXT/CSV/MD",
-        )
+    # 创建多模态文本框，支持上传多种类型的文件
+    multi_textbox = gr.MultimodalTextbox(
+        file_count="multiple",
+        file_types=["image", "text", ".docx", ".pptx", ".xlsx", ".pdf"],
+        info="支持上传多文件, 文件格式: PDF/Word文档(DOC/DOCX)/Excel表格(XLSX)/PPT(PPT/PPTX)/TXT/CSV/MD",
+        submit_btn = "发送",
+        stop_btn="停止"
+    )
 
     # 创建聊天界面
-    chat_interface = gr.ChatInterface(
-        predict_wrapper,
+    gr.ChatInterface(
+        # predict_wrapper,
+        chat_predictor.run,  
         chatbot=chatbot,
-        textbox=textbox,
+        textbox=multi_textbox,
         # additional_inputs=[model_selector],
         concurrency_limit=5,
         title="",
-        submit_btn="发送",
-        stop_btn="停止",
-        retry_btn=None,
-        undo_btn=None,
-        clear_btn=None,
+        # submit_btn="发送",
+        # stop_btn="停止",
         multimodal=True,
+        type="messages",
         fill_width=True,
     )
 

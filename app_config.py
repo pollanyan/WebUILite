@@ -42,7 +42,7 @@ class ConfigManager:
                 "BASE_URL": "http://localhost:11434/v1/",
                 "API_KEY": SecretStr("ollama").get_secret_value(),
                 "TEMPERATURE": 1.0,
-                "DEFAULT_MODEL": "qwen2.5:latest"
+                "MODEL": "qwen2.5:latest"
             }
             self.config = initial_config
             self.save_config()
